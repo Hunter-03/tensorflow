@@ -1,0 +1,82 @@
+pip install opencv-python SpeechRecognition pyttsx3
+import cv2
+import speech_recognition as sr
+import pyttsx3
+import time
+
+# Initialize TTS engine for audio feedback
+engine = pyttsx3.init()
+
+def speak(text):
+    engine.say(text)
+    engine.runAndWait()
+
+# Voice Command Recognition
+def listen_command():
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("Listening for a command...")
+        audio = recognizer.listen(source)
+        try:
+            command = recognizer.recognize_google(audio).lower()
+            print(f"Command recognized: {command}")
+            return command
+        except sr.UnknownValueError:
+            speak("Sorry, I didn't understand that.")
+        except sr.RequestError:
+            speak("Speech recognition service is unavailable.")
+        return ""
+
+# Initialize variables for light state and detection
+light_on = False
+last_motion_time = time.time()
+
+def toggle_light(state):
+    global light_on
+    if state:
+        speak("Turning the light on.")
+        light_on = True
+    else:
+        speak("Turning the light off.")
+        light_on = False
+
+# Start webcam for motion detection
+cap = cv2.VideoCapture(0)
+_, frame1 = cap.read()
+_, frame2 = cap.read()
+
+try:
+    while True:
+        # Detect motion by comparing frames
+        diff = cv2.absdiff(frame1, frame2)
+        gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+        _, thresh = cv2.threshold(gray, 30, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Check if motion is detected
+        if contours:
+            last_motion_time = time.time()
+            if not light_on:
+                toggle_light(True)
+
+        # Turn off light if no motion is detected for 10 seconds
+        if light_on and time.time() - last_motion_time > 10:
+            toggle_light(False)
+
+        # Capture voice command
+        command = listen_command()
+        if "light on" in command:
+            toggle_light(True)
+        elif "light off" in command:
+            toggle_light(False)
+
+        # Update frames for next comparison
+        frame1 = frame2
+        _, frame2 = cap.read()
+
+except KeyboardInterrupt:
+    print("Exiting program.")
+
+finally:
+    cap.release()
+    cv2.destroyAllWindows()
